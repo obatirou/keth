@@ -172,6 +172,7 @@ class TestSerde:
             Set[Tuple[Address, Bytes32]],
             Union[Uint, U256],
             Set[Address],
+            Mapping[Bytes, U256],
         ],
     ):
         assume(no_empty_sequence(b))

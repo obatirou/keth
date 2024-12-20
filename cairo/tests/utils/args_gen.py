@@ -145,6 +145,7 @@ _cairo_struct_to_python_type: Dict[Tuple[str, ...], Any] = {
     ("ethereum", "cancun", "fork_types", "SetTupleAddressBytes32"): Set[
         Tuple[Address, Bytes32]
     ],
+    ("ethereum", "cancun", "state", "MappingBytesU256"): Mapping[Bytes, U256],
     ("ethereum", "cancun", "transactions", "LegacyTransaction"): LegacyTransaction,
     (
         "ethereum",

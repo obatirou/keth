@@ -24,6 +24,8 @@ from ethereum.cancun.blocks import (
     Receipt,
 )
 
+from ethereum.cancun.state import MappingBytesU256
+
 from ethereum.cancun.transactions import (
     TupleAccessList,
     Transaction,
