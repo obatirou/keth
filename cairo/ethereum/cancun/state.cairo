@@ -15,3 +15,13 @@ struct MappingBytesU256Struct {
 struct MappingBytesU256 {
     value: MappingBytesU256Struct*,
 }
+
+struct TrieBytesU256Struct {
+    secured: bool,
+    default: U256,
+    _data: MappingBytesU256,
+}
+
+struct TrieBytesU256 {
+    value: TrieBytesU256Struct*,
+}
