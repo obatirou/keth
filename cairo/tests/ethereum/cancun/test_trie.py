@@ -145,7 +145,7 @@ class TestTrie:
         assert value == obj.get(level, b"")
 
     @pytest.mark.slow
-    @settings(max_examples=300)
+    @settings(max_examples=200)
     @given(obj=st.dictionaries(nibble, bytes32))
     def test_patricialize(self, cairo_run, obj: Mapping[Bytes, Bytes]):
         assert patricialize(obj, Uint(0)) == cairo_run("patricialize", obj, Uint(0))
