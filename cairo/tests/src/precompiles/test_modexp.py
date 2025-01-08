@@ -1,6 +1,7 @@
 import math
 
 import pytest
+from hypothesis import settings
 
 pytestmark = pytest.mark.python_vm
 
@@ -8,6 +9,7 @@ pytestmark = pytest.mark.python_vm
 @pytest.mark.MOD_EXP
 class TestModExp:
     @pytest.mark.slow
+    @settings(max_examples=20)  # for max_examples=2, it takes 20.63 in local
     def test_modexp(self, cairo_run):
         b = 3
         b_size = math.ceil(math.log(b, 256))
