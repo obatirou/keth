@@ -23,9 +23,11 @@ from ethereum.cancun.trie import (
     AccountStruct,
     TrieBytes32U256Struct,
     TrieAddressAccountStruct,
+    copy_trieAddressAccount,
 )
 from ethereum_types.bytes import Bytes, Bytes32
 from ethereum_types.numeric import U256, U256Struct, Bool, bool
+from ethereum.utils.numeric import is_zero
 
 from src.utils.dict import hashdict_read, hashdict_write, hashdict_get
 
@@ -464,4 +466,137 @@ func is_account_empty{poseidon_ptr: PoseidonBuiltin*, state: State}(address: Add
 
     tempvar res = bool(1);
     return res;
+}
+func begin_transaction{
+    range_check_ptr,
+    poseidon_ptr: PoseidonBuiltin*,
+    state: State,
+    transient_storage: TransientStorage,
+}() {
+    alloc_locals;
+
+    // Copy the main trie
+    let trie = state.value._main_trie;
+    let copied_main_trie = copy_trieAddressAccount{trie=trie}();
+
+    // Initialize a new storage tries mapping to be used in the snapshot
+    %{ initial_dict = {} %}
+    let (new_storage_tries_dict_ptr) = dict_new();
+    tempvar new_storage_tries = MappingAddressTrieBytes32U256(
+        new MappingAddressTrieBytes32U256Struct(
+            dict_ptr_start=cast(new_storage_tries_dict_ptr, AddressTrieBytes32U256DictAccess*),
+            dict_ptr=cast(new_storage_tries_dict_ptr, AddressTrieBytes32U256DictAccess*),
+            original_mapping=cast(0, MappingAddressTrieBytes32U256Struct*),
+        ),
+    );
+
+    // Iterate over storage tries and copy each in the new storage tries mapping
+    let storage_tries_dict_ptr = cast(state.value._storage_tries.value.dict_ptr, DictAccess*);
+    let storage_tries_dict_ptr_start = storage_tries_dict_ptr;
+    let (keys_felt) = hashdict_read{poseidon_ptr=poseidon_ptr, dict_ptr=storage_tries_dict_ptr}(
+        1, &storage_tries_dict_ptr_start
+    );
+    let keys = cast(keys_felt, Address*);
+    tempvar i = 0;
+
+    loop_storage_tries:
+    let i = [ap - 1];
+    let key = keys[i];
+    let (trie_ptr) = hashdict_get{poseidon_ptr=poseidon_ptr, dict_ptr=storage_tries_dict_ptr}(
+        1, &key
+    );
+    tempvar stop = 1 - is_zero(trie_ptr);
+    jmp end_loop_storage_tries if stop != 0;
+    tempvar trie_to_copy = TrieBytes32U256(cast(trie_ptr, TrieBytes32U256Struct*));
+    let copied_trie = copy_trieAddressAccount{trie=trie_to_copy}();
+    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_storage_tries.value.dict_ptr}(
+        1, &key, cast(copied_trie.value, felt)
+    );
+    tempvar i = i + 1;
+    jmp loop_storage_tries;
+
+    end_loop_storage_tries:
+    // Store in snapshots the copied main trie and the new storage tries mapping
+    tempvar new_snapshot = TupleTrieAddressAccountMappingAddressTrieBytes32U256(
+        new TupleTrieAddressAccountMappingAddressTrieBytes32U256Struct(
+            trie_address_account=copied_main_trie, mapping_address_trie=new_storage_tries
+        ),
+    );
+
+    tempvar new_snapshots = ListTupleTrieAddressAccountMappingAddressTrieBytes32U256(
+        new ListTupleTrieAddressAccountMappingAddressTrieBytes32U256Struct(
+            data=state.value._snapshots.value.data, len=state.value._snapshots.value.len + 1
+        ),
+    );
+    new_snapshots.value.data[state.value._snapshots.value.len] = new_snapshot;
+
+    // Update state with new snapshots
+    tempvar state = State(
+        new StateStruct(
+            _main_trie=state.value._main_trie,
+            _storage_tries=state.value._storage_tries,
+            _snapshots=new_snapshots,
+            created_accounts=state.value.created_accounts,
+        ),
+    );
+
+    // Repeat for transient storage
+    %{ initial_dict = {} %}
+    let (new_transient_storage_tries_dict_ptr) = dict_new();
+    let new_transient_storage_tries = MappingAddressTrieBytes32U256(
+        new MappingAddressTrieBytes32U256Struct(
+            dict_ptr_start=cast(
+                new_transient_storage_tries_dict_ptr, AddressTrieBytes32U256DictAccess*
+            ),
+            dict_ptr=cast(new_transient_storage_tries_dict_ptr, AddressTrieBytes32U256DictAccess*),
+            original_mapping=cast(0, MappingAddressTrieBytes32U256Struct*),
+        ),
+    );
+
+    let transient_storage_tries_dict_ptr = cast(
+        transient_storage.value._tries.value.dict_ptr, DictAccess*
+    );
+    let (transient_keys) = hashdict_read{
+        poseidon_ptr=poseidon_ptr, dict_ptr=transient_storage_tries_dict_ptr
+    }();
+
+    loop_transient_storage_tries:
+    let key = transient_keys[i];
+    let trie_ptr = hashdict_get{
+        poseidon_ptr=poseidon_ptr, dict_ptr=transient_storage_tries_dict_ptr
+    }(1, &key);
+    let stop = 1 - is_zero(trie_ptr);
+    jmp end_loop_transient_storage_tries if stop != 0;
+    let trie = TrieBytes32U256(cast(trie_ptr, TrieBytes32U256Struct*));
+    let copied_trie = copy_trieAddressAccount(trie);
+    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_transient_storage_tries.value.dict_ptr}(
+        1, &key, cast(copied_trie.value, felt)
+    );
+    jmp loop_transient_storage_tries;
+
+    end_loop_transient_storage_tries:
+    let new_transient_snapshot = MappingAddressTrieBytes32U256(
+        new MappingAddressTrieBytes32U256Struct(
+            dict_ptr_start=new_transient_storage_tries.value.dict_ptr_start,
+            dict_ptr=new_transient_storage_tries.value.dict_ptr,
+            original_mapping=new_transient_storage_tries.value.original_mapping,
+        ),
+    );
+
+    let new_transient_snapshots = TransientStorageSnapshots(
+        new TransientStorageSnapshotsStruct(
+            data=transient_storage.value._snapshots.value.data,
+            len=transient_storage.value._snapshots.value.len + 1,
+        ),
+    );
+    new_transient_snapshots.value.data[transient_storage.value._snapshots.value.len] = new_transient_snapshot;
+
+    // Update transient storage with new snapshots
+    tempvar transient_storage = TransientStorage(
+        new TransientStorageStruct(
+            _tries=transient_storage.value._tries, _snapshots=new_transient_snapshots
+        ),
+    );
+
+    return ();
 }

@@ -9,6 +9,7 @@ from ethereum.cancun.fork_types import Address
 from ethereum.cancun.state import (
     account_exists,
     account_has_code_or_nonce,
+    begin_transaction,
     get_account,
     get_account_optional,
     get_storage,
@@ -17,7 +18,7 @@ from ethereum.cancun.state import (
     set_storage,
     set_transient_storage,
 )
-from tests.utils.args_gen import TransientStorage
+from tests.utils.args_gen import State, TransientStorage
 from tests.utils.strategies import address, bytes32, state, transient_storage
 
 pytestmark = pytest.mark.python_vm
@@ -161,4 +162,19 @@ class TestTransientStorage:
             value,
         )
         set_transient_storage(transient_storage, address, key, value)
+        assert transient_storage_cairo == transient_storage
+
+
+class TestBeginTransaction:
+    @given(state=state(), transient_storage=transient_storage())
+    def test_begin_transaction(
+        self, cairo_run, state: State, transient_storage: TransientStorage
+    ):
+        state_cairo, transient_storage_cairo = cairo_run(
+            "begin_transaction",
+            state,
+            transient_storage,
+        )
+        begin_transaction(state, transient_storage)
+        assert state_cairo == state
         assert transient_storage_cairo == transient_storage
