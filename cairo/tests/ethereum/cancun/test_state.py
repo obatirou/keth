@@ -1,7 +1,7 @@
 import pytest
 from ethereum_types.bytes import Bytes32
 from ethereum_types.numeric import U256
-from hypothesis import given
+from hypothesis import given, reproduce_failure
 from hypothesis import strategies as st
 from hypothesis.strategies import composite
 
@@ -166,6 +166,7 @@ class TestTransientStorage:
 
 
 class TestBeginTransaction:
+    @reproduce_failure("6.122.3", b"AAAAAAAAAA==")
     @given(state=..., transient_storage=...)
     def test_begin_transaction(
         self, cairo_run, state: State, transient_storage: TransientStorage

@@ -496,24 +496,29 @@ func begin_transaction{
     );
 
     // Iterate over storage tries and copy each in the new storage tries mapping
-    let storage_tries_dict_start = cast(
+    tempvar storage_tries_dict_end_ptr = cast(
+        state.value._storage_tries.value.dict_ptr, DictAccess*
+    );
+    tempvar storage_tries_dict_start_ptr = cast(
         state.value._storage_tries.value.dict_ptr_start, DictAccess*
     );
-    tempvar storage_tries_dict_end = cast(state.value._storage_tries.value.dict_ptr, DictAccess*);
-    tempvar current_dict_ptr = storage_tries_dict_start;
 
     loop_storage_tries:
     // Get the end of the dictionary and the current pointer
-    let storage_tries_dict_end = cast([ap - 2], DictAccess*);
-    let current_dict_ptr = cast([ap - 1], DictAccess*);
+    let storage_tries_dict_end_ptr = cast([ap - 2], DictAccess*);
+    let storage_tries_dict_start_ptr = cast([ap - 1], DictAccess*);
 
     // Check if we reached the end of the dictionary
-    tempvar continue = 1 - is_zero(current_dict_ptr - storage_tries_dict_end);
+    tempvar continue = 1 - is_zero(
+        cast(storage_tries_dict_start_ptr, felt) - cast(storage_tries_dict_end_ptr, felt)
+    );
     jmp end_loop_storage_tries if continue != 0;
 
     // Get the current entry
-    let key = [cast(current_dict_ptr, AddressTrieBytes32U256DictAccess*)].key;
-    let trie_ptr = [cast(current_dict_ptr, AddressTrieBytes32U256DictAccess*)].new_value;
+    let key = [cast(storage_tries_dict_start_ptr, AddressTrieBytes32U256DictAccess*)].key;
+    let trie_ptr = [
+        cast(storage_tries_dict_start_ptr, AddressTrieBytes32U256DictAccess*)
+    ].new_value;
 
     // Copy the trie
     tempvar trie_to_copy = TrieAddressAccount(cast(trie_ptr.value, TrieAddressAccountStruct*));
@@ -526,8 +531,8 @@ func begin_transaction{
     );
 
     // Move to next entry
-    tempvar storage_tries_dict_end = storage_tries_dict_end;
-    tempvar current_dict_ptr = current_dict_ptr + DictAccess.SIZE;
+    tempvar storage_tries_dict_end_ptr = storage_tries_dict_end_ptr;
+    tempvar storage_tries_dict_start_ptr = storage_tries_dict_start_ptr + DictAccess.SIZE;
     jmp loop_storage_tries;
 
     end_loop_storage_tries:
@@ -574,28 +579,31 @@ func begin_transaction{
     );
 
     // Iterate over transient storage tries
-    let transient_storage_tries_dict_start = cast(
-        transient_storage.value._tries.value.dict_ptr_start, DictAccess*
-    );
     tempvar transient_storage_tries_dict_end = cast(
         transient_storage.value._tries.value.dict_ptr, DictAccess*
     );
-    tempvar current_dict_ptr = transient_storage_tries_dict_start;
+    tempvar transient_storage_tries_dict_start = cast(
+        transient_storage.value._tries.value.dict_ptr_start, DictAccess*
+    );
 
     loop_transient_storage_tries:
     // Get the end of the dictionary and the current pointer
     let transient_storage_tries_dict_end = cast([ap - 2], DictAccess*);
-    let current_dict_ptr = cast([ap - 1], DictAccess*);
+    let transient_storage_tries_dict_start = cast([ap - 1], DictAccess*);
 
     // Check if we reached the end of the dictionary
     tempvar continue = 1 - is_zero(
-        cast(current_dict_ptr, felt) - cast(transient_storage_tries_dict_end, felt)
+        cast(transient_storage_tries_dict_start, felt) - cast(
+            transient_storage_tries_dict_end, felt
+        ),
     );
     jmp end_loop_transient_storage_tries if continue != 0;
 
     // Get the current entry
-    let key = [cast(current_dict_ptr, AddressTrieBytes32U256DictAccess*)].key;
-    let trie_ptr = [cast(current_dict_ptr, AddressTrieBytes32U256DictAccess*)].new_value;
+    let key = [cast(transient_storage_tries_dict_start, AddressTrieBytes32U256DictAccess*)].key;
+    let trie_ptr = [
+        cast(transient_storage_tries_dict_start, AddressTrieBytes32U256DictAccess*)
+    ].new_value;
 
     // Copy the trie
     let trie_to_copy_bytes32_u256 = TrieBytes32U256(cast(trie_ptr.value, TrieBytes32U256Struct*));
@@ -611,7 +619,8 @@ func begin_transaction{
 
     // Move to next entry
     tempvar transient_storage_tries_dict_end = transient_storage_tries_dict_end;
-    tempvar current_dict_ptr = current_dict_ptr + DictAccess.SIZE;
+    tempvar transient_storage_tries_dict_start = transient_storage_tries_dict_start +
+        DictAccess.SIZE;
     jmp loop_transient_storage_tries;
 
     end_loop_transient_storage_tries:
