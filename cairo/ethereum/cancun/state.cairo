@@ -496,12 +496,12 @@ func begin_transaction{
     );
 
     // Iterate over storage tries and copy each in the new storage tries mapping
-    tempvar storage_tries_dict_end_ptr = cast(
-        state.value._storage_tries.value.dict_ptr, DictAccess*
-    );
-    tempvar storage_tries_dict_start_ptr = cast(
-        state.value._storage_tries.value.dict_ptr_start, DictAccess*
-    );
+    // Note: the 2 following variables are  to avoid having intermediate variables created by the compiler
+    tempvar storage_tries_dict_end_ptr_temp = state.value._storage_tries.value.dict_ptr;
+    tempvar storage_tries_dict_start_ptr_temp = state.value._storage_tries.value.dict_ptr_start;
+
+    tempvar storage_tries_dict_end_ptr = cast(storage_tries_dict_end_ptr_temp, DictAccess*);
+    tempvar storage_tries_dict_start_ptr = cast(storage_tries_dict_start_ptr_temp, DictAccess*);
 
     loop_storage_tries:
     // Get the end of the dictionary and the current pointer
@@ -509,10 +509,8 @@ func begin_transaction{
     let storage_tries_dict_start_ptr = cast([ap - 1], DictAccess*);
 
     // Check if we reached the end of the dictionary
-    tempvar continue = 1 - is_zero(
-        cast(storage_tries_dict_start_ptr, felt) - cast(storage_tries_dict_end_ptr, felt)
-    );
-    jmp end_loop_storage_tries if continue != 0;
+    tempvar continue_loop = is_zero(storage_tries_dict_start_ptr - storage_tries_dict_end_ptr);
+    jmp end_loop_storage_tries if continue_loop != 0;
 
     // Get the current entry
     let key = [cast(storage_tries_dict_start_ptr, AddressTrieBytes32U256DictAccess*)].key;
@@ -521,6 +519,8 @@ func begin_transaction{
     ].new_value;
 
     // Copy the trie
+    tempvar go_to_next_entry = is_zero(cast(trie_ptr.value, felt));
+    jmp next_entry if go_to_next_entry != 0;
     tempvar trie_to_copy = TrieAddressAccount(cast(trie_ptr.value, TrieAddressAccountStruct*));
     let copied_trie = copy_trieAddressAccount{trie=trie_to_copy}();
 
@@ -531,6 +531,7 @@ func begin_transaction{
     );
 
     // Move to next entry
+    next_entry:
     tempvar storage_tries_dict_end_ptr = storage_tries_dict_end_ptr;
     tempvar storage_tries_dict_start_ptr = storage_tries_dict_start_ptr + DictAccess.SIZE;
     jmp loop_storage_tries;
@@ -579,11 +580,13 @@ func begin_transaction{
     );
 
     // Iterate over transient storage tries
-    tempvar transient_storage_tries_dict_end = cast(
-        transient_storage.value._tries.value.dict_ptr, DictAccess*
+    tempvar transient_storage_tries_dict_end_ptr_temp = transient_storage.value._tries.value.dict_ptr;
+    tempvar transient_storage_tries_dict_start_ptr_temp = transient_storage.value._tries.value.dict_ptr_start;
+    tempvar transient_storage_tries_dict_end_ptr = cast(
+        transient_storage_tries_dict_end_ptr_temp, DictAccess*
     );
-    tempvar transient_storage_tries_dict_start = cast(
-        transient_storage.value._tries.value.dict_ptr_start, DictAccess*
+    tempvar transient_storage_tries_dict_start_ptr = cast(
+        transient_storage_tries_dict_start_ptr_temp, DictAccess*
     );
 
     loop_transient_storage_tries:
@@ -592,12 +595,10 @@ func begin_transaction{
     let transient_storage_tries_dict_start = cast([ap - 1], DictAccess*);
 
     // Check if we reached the end of the dictionary
-    tempvar continue = 1 - is_zero(
-        cast(transient_storage_tries_dict_start, felt) - cast(
-            transient_storage_tries_dict_end, felt
-        ),
+    tempvar continue_loop = is_zero(
+        transient_storage_tries_dict_start - transient_storage_tries_dict_end
     );
-    jmp end_loop_transient_storage_tries if continue != 0;
+    jmp end_loop_transient_storage_tries if continue_loop != 0;
 
     // Get the current entry
     let key = [cast(transient_storage_tries_dict_start, AddressTrieBytes32U256DictAccess*)].key;
@@ -606,6 +607,8 @@ func begin_transaction{
     ].new_value;
 
     // Copy the trie
+    tempvar go_to_next_entry = is_zero(cast(trie_ptr.value, felt));
+    jmp next_entry if go_to_next_entry != 0;
     let trie_to_copy_bytes32_u256 = TrieBytes32U256(cast(trie_ptr.value, TrieBytes32U256Struct*));
     let copied_trie_bytes32_u256 = copy_trieBytes32U256{trie=trie_to_copy_bytes32_u256}();
 
