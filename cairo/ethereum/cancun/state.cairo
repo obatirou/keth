@@ -545,8 +545,7 @@ func begin_transaction{
     );
 
     // Update the snapshots list
-    let current_snapshot = state.value._snapshots.value.data.value +
-        state.value._snapshots.value.len;
+    let current_snapshot = state.value._snapshots.value.data + state.value._snapshots.value.len;
     let current_snapshot_ptr = cast(current_snapshot, felt);
     assert [current_snapshot_ptr] = cast(new_snapshot.value, felt);
 
