@@ -499,11 +499,15 @@ func begin_transaction{
     let storage_tries_dict_start = cast(
         state.value._storage_tries.value.dict_ptr_start, DictAccess*
     );
-    let storage_tries_dict_end = cast(state.value._storage_tries.value.dict_ptr, DictAccess*);
+    tempvar storage_tries_dict_end = cast(state.value._storage_tries.value.dict_ptr, DictAccess*);
     tempvar current_dict_ptr = storage_tries_dict_start;
 
     loop_storage_tries:
-    // Check if we've reached the end of the dictionary
+    // Get the end of the dictionary and the current pointer
+    let storage_tries_dict_end = cast([ap - 2], DictAccess*);
+    let current_dict_ptr = cast([ap - 1], DictAccess*);
+
+    // Check if we reached the end of the dictionary
     tempvar continue = 1 - is_zero(current_dict_ptr - storage_tries_dict_end);
     jmp end_loop_storage_tries if continue != 0;
 
@@ -522,6 +526,7 @@ func begin_transaction{
     );
 
     // Move to next entry
+    tempvar storage_tries_dict_end = storage_tries_dict_end;
     tempvar current_dict_ptr = current_dict_ptr + DictAccess.SIZE;
     jmp loop_storage_tries;
 
@@ -572,14 +577,20 @@ func begin_transaction{
     let transient_storage_tries_dict_start = cast(
         transient_storage.value._tries.value.dict_ptr_start, DictAccess*
     );
-    let transient_storage_tries_dict_end = cast(
+    tempvar transient_storage_tries_dict_end = cast(
         transient_storage.value._tries.value.dict_ptr, DictAccess*
     );
     tempvar current_dict_ptr = transient_storage_tries_dict_start;
 
     loop_transient_storage_tries:
-    // Check if we've reached the end of the dictionary
-    tempvar continue = 1 - is_zero(current_dict_ptr - transient_storage_tries_dict_end);
+    // Get the end of the dictionary and the current pointer
+    let transient_storage_tries_dict_end = cast([ap - 2], DictAccess*);
+    let current_dict_ptr = cast([ap - 1], DictAccess*);
+
+    // Check if we reached the end of the dictionary
+    tempvar continue = 1 - is_zero(
+        cast(current_dict_ptr, felt) - cast(transient_storage_tries_dict_end, felt)
+    );
     jmp end_loop_transient_storage_tries if continue != 0;
 
     // Get the current entry
@@ -599,6 +610,7 @@ func begin_transaction{
     );
 
     // Move to next entry
+    tempvar transient_storage_tries_dict_end = transient_storage_tries_dict_end;
     tempvar current_dict_ptr = current_dict_ptr + DictAccess.SIZE;
     jmp loop_transient_storage_tries;
 
