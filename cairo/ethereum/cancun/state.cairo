@@ -495,48 +495,13 @@ func begin_transaction{
         ),
     );
 
-    // Iterate over storage tries and copy each in the new storage tries mapping
-    // Note: the 2 following variables are  to avoid having intermediate variables created by the compiler
-    tempvar storage_tries_dict_end_ptr_temp = state.value._storage_tries.value.dict_ptr;
-    tempvar storage_tries_dict_start_ptr_temp = state.value._storage_tries.value.dict_ptr_start;
-
-    tempvar storage_tries_dict_end_ptr = cast(storage_tries_dict_end_ptr_temp, DictAccess*);
-    tempvar storage_tries_dict_start_ptr = cast(storage_tries_dict_start_ptr_temp, DictAccess*);
-
-    loop_storage_tries:
-    // Get the end of the dictionary and the current pointer
-    let storage_tries_dict_end_ptr = cast([ap - 2], DictAccess*);
-    let storage_tries_dict_start_ptr = cast([ap - 1], DictAccess*);
-
-    // Check if we reached the end of the dictionary
-    tempvar continue_loop = is_zero(storage_tries_dict_start_ptr - storage_tries_dict_end_ptr);
-    jmp end_loop_storage_tries if continue_loop != 0;
-
-    // Get the current entry
-    let key = [cast(storage_tries_dict_start_ptr, AddressTrieBytes32U256DictAccess*)].key;
-    let trie_ptr = [
-        cast(storage_tries_dict_start_ptr, AddressTrieBytes32U256DictAccess*)
-    ].new_value;
-
-    // Copy the trie
-    tempvar go_to_next_entry = is_zero(cast(trie_ptr.value, felt));
-    jmp next_entry if go_to_next_entry != 0;
-    tempvar trie_to_copy = TrieAddressAccount(cast(trie_ptr.value, TrieAddressAccountStruct*));
-    let copied_trie = copy_trieAddressAccount{trie=trie_to_copy}();
-
-    // Write to new storage tries mapping
-    let new_storage_trie_ptr = cast(new_storage_tries.value.dict_ptr, DictAccess*);
-    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_storage_trie_ptr}(
-        1, &key.value, cast(copied_trie.value, felt)
+    // Copy storage tries using recursive function
+    let new_storage_tries = copy_storage_tries_recursive(
+        cast(state.value._storage_tries.value.dict_ptr_start, AddressTrieBytes32U256DictAccess*),
+        cast(state.value._storage_tries.value.dict_ptr, AddressTrieBytes32U256DictAccess*),
+        new_storage_tries,
     );
 
-    // Move to next entry
-    next_entry:
-    tempvar storage_tries_dict_end_ptr = storage_tries_dict_end_ptr;
-    tempvar storage_tries_dict_start_ptr = storage_tries_dict_start_ptr + DictAccess.SIZE;
-    jmp loop_storage_tries;
-
-    end_loop_storage_tries:
     // Store in snapshots the copied main trie and the new storage tries mapping
     tempvar new_snapshot = TupleTrieAddressAccountMappingAddressTrieBytes32U256(
         new TupleTrieAddressAccountMappingAddressTrieBytes32U256Struct(
@@ -565,7 +530,7 @@ func begin_transaction{
         ),
     );
 
-    // Repeat for transient storage
+    // Initialize new transient storage tries mapping
     %{ initial_dict = {} %}
     let (new_transient_storage_tries_dict_ptr) = dict_new();
     tempvar new_transient_storage_tries = MappingAddressTrieBytes32U256(
@@ -578,54 +543,15 @@ func begin_transaction{
         ),
     );
 
-    // Iterate over transient storage tries
-    tempvar transient_storage_tries_dict_end_ptr_temp = transient_storage.value._tries.value.dict_ptr;
-    tempvar transient_storage_tries_dict_start_ptr_temp = transient_storage.value._tries.value.dict_ptr_start;
-    tempvar transient_storage_tries_dict_end_ptr = cast(
-        transient_storage_tries_dict_end_ptr_temp, DictAccess*
-    );
-    tempvar transient_storage_tries_dict_start_ptr = cast(
-        transient_storage_tries_dict_start_ptr_temp, DictAccess*
-    );
-
-    loop_transient_storage_tries:
-    // Get the end of the dictionary and the current pointer
-    let transient_storage_tries_dict_end = cast([ap - 2], DictAccess*);
-    let transient_storage_tries_dict_start = cast([ap - 1], DictAccess*);
-
-    // Check if we reached the end of the dictionary
-    tempvar continue_loop = is_zero(
-        transient_storage_tries_dict_start - transient_storage_tries_dict_end
-    );
-    jmp end_loop_transient_storage_tries if continue_loop != 0;
-
-    // Get the current entry
-    let key = [cast(transient_storage_tries_dict_start, AddressTrieBytes32U256DictAccess*)].key;
-    let trie_ptr = [
-        cast(transient_storage_tries_dict_start, AddressTrieBytes32U256DictAccess*)
-    ].new_value;
-
-    // Copy the trie
-    tempvar go_to_next_entry = is_zero(cast(trie_ptr.value, felt));
-    jmp next_entry if go_to_next_entry != 0;
-    let trie_to_copy_bytes32_u256 = TrieBytes32U256(cast(trie_ptr.value, TrieBytes32U256Struct*));
-    let copied_trie_bytes32_u256 = copy_trieBytes32U256{trie=trie_to_copy_bytes32_u256}();
-
-    // Write to new transient storage tries mapping
-    let new_transient_storage_tries_dict_ptr = cast(
-        new_transient_storage_tries.value.dict_ptr, DictAccess*
-    );
-    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_transient_storage_tries_dict_ptr}(
-        1, &key.value, cast(copied_trie_bytes32_u256.value, felt)
+    // Copy transient storage tries using recursive function
+    let new_transient_storage_tries = copy_transient_storage_tries_recursive(
+        cast(
+            transient_storage.value._tries.value.dict_ptr_start, AddressTrieBytes32U256DictAccess*
+        ),
+        cast(transient_storage.value._tries.value.dict_ptr, AddressTrieBytes32U256DictAccess*),
+        new_transient_storage_tries,
     );
 
-    // Move to next entry
-    tempvar transient_storage_tries_dict_end = transient_storage_tries_dict_end;
-    tempvar transient_storage_tries_dict_start = transient_storage_tries_dict_start +
-        DictAccess.SIZE;
-    jmp loop_transient_storage_tries;
-
-    end_loop_transient_storage_tries:
     tempvar new_transient_snapshot = MappingAddressTrieBytes32U256(
         new MappingAddressTrieBytes32U256Struct(
             dict_ptr_start=new_transient_storage_tries.value.dict_ptr_start,
@@ -634,7 +560,7 @@ func begin_transaction{
         ),
     );
 
-    // Update the snapshots list using pointer arithmetic, similar to main state
+    // Update the snapshots list
     let current_transient_snapshot = transient_storage.value._snapshots.value.data +
         transient_storage.value._snapshots.value.len;
     let current_transient_snapshot_ptr = cast(current_transient_snapshot, felt);
@@ -655,4 +581,83 @@ func begin_transaction{
     );
 
     return ();
+}
+
+func copy_storage_tries_recursive{range_check_ptr, poseidon_ptr: PoseidonBuiltin*}(
+    dict_start: AddressTrieBytes32U256DictAccess*,
+    dict_end: AddressTrieBytes32U256DictAccess*,
+    new_storage_tries: MappingAddressTrieBytes32U256,
+) -> MappingAddressTrieBytes32U256 {
+    alloc_locals;
+    // Base case: if start == end, return the new mapping
+    if (dict_start == dict_end) {
+        return new_storage_tries;
+    }
+
+    // Get the current entry
+    let key = [dict_start].key;
+    let trie_ptr = [dict_start].new_value;
+
+    // Copy the trie
+    tempvar trie_to_copy = TrieAddressAccount(cast(trie_ptr.value, TrieAddressAccountStruct*));
+    let copied_trie = copy_trieAddressAccount{trie=trie_to_copy}();
+
+    // Write to new storage tries mapping
+    let new_storage_trie_ptr = cast(new_storage_tries.value.dict_ptr, DictAccess*);
+    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_storage_trie_ptr}(
+        1, &key.value, cast(copied_trie.value, felt)
+    );
+
+    // Recursive call with next entry
+    return copy_storage_tries_recursive(
+        dict_start + AddressTrieBytes32U256DictAccess.SIZE,
+        dict_end,
+        MappingAddressTrieBytes32U256(
+            new MappingAddressTrieBytes32U256Struct(
+                dict_ptr_start=new_storage_tries.value.dict_ptr_start,
+                dict_ptr=cast(new_storage_trie_ptr, AddressTrieBytes32U256DictAccess*),
+                original_mapping=new_storage_tries.value.original_mapping,
+            ),
+        ),
+    );
+}
+
+func copy_transient_storage_tries_recursive{range_check_ptr, poseidon_ptr: PoseidonBuiltin*}(
+    dict_start: AddressTrieBytes32U256DictAccess*,
+    dict_end: AddressTrieBytes32U256DictAccess*,
+    new_transient_tries: MappingAddressTrieBytes32U256,
+) -> MappingAddressTrieBytes32U256 {
+    alloc_locals;
+
+    // Base case: if start == end, return the new mapping
+    if (dict_start == dict_end) {
+        return new_transient_tries;
+    }
+
+    // Get the current entry
+    let key = [dict_start].key;
+    let trie_ptr = [dict_start].new_value;
+
+    // Copy the trie
+    let trie_to_copy = TrieBytes32U256(cast(trie_ptr.value, TrieBytes32U256Struct*));
+    let copied_trie = copy_trieBytes32U256{trie=trie_to_copy}();
+
+    // Write to new transient storage tries mapping
+    let new_transient_trie_ptr = cast(new_transient_tries.value.dict_ptr, DictAccess*);
+    hashdict_write{poseidon_ptr=poseidon_ptr, dict_ptr=new_transient_trie_ptr}(
+        1, &key.value, cast(copied_trie.value, felt)
+    );
+
+    // Recursive call with next entry
+    return copy_transient_storage_tries_recursive(
+        dict_start + AddressTrieBytes32U256DictAccess.SIZE,
+        dict_end,
+        MappingAddressTrieBytes32U256(
+            new MappingAddressTrieBytes32U256Struct(
+                dict_ptr_start=new_transient_tries.value.dict_ptr_start,
+                dict_ptr=cast(new_transient_trie_ptr, AddressTrieBytes32U256DictAccess*),
+                original_mapping=new_transient_tries.value.original_mapping,
+            ),
+        ),
+    );
 }
